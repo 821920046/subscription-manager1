@@ -721,7 +721,7 @@ export const adminPage = `
         let v = values[i];
         if (v === undefined || v === null) v = '';
         let s = String(v);
-        const needQuote = (s.indexOf(',') !== -1) || (s.indexOf('"') !== -1) || (s.indexOf("'") !== -1) || (s.indexOf('\n') !== -1);
+        const needQuote = (s.indexOf(',') !== -1) || (s.indexOf('"') !== -1) || (s.indexOf("'") !== -1) || (s.indexOf('\\n') !== -1);
         if (needQuote) {
           s = '"' + s.replace(/"/g, '""') + '"';
         }
