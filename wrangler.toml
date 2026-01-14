@@ -3,20 +3,15 @@ main = "src/worker.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-[env.production]
-name = "subscription-manager"
-workers_dev = true
-preview_urls = true
-  
-  [env.production.vars]
-  ENVIRONMENT = "production"
-  
-  [[env.production.kv_namespaces]]
-  binding = "SUBSCRIPTIONS_KV"
-  id = "a2827759fb114eb682d59a426c4c85b5"
-  
-  [env.production.triggers]
-  crons = ["* * * * *"]
+# 绑定 KV 命名空间
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS_KV"
+id = "a2827759fb114eb682d59a426c4c85b5"
 
-[env.staging]
-name = "subscription-manager-staging"
+# 自动任务（每分钟执行检查）
+[triggers]
+crons = ["* * * * *"]
+
+# 环境变量
+[vars]
+ENVIRONMENT = "production"
