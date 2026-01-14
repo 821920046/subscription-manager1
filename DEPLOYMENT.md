@@ -38,13 +38,36 @@ id = "您的_KV_NAMESPACE_ID"  # 在这里填入您在第2步中获得的ID
 
 本项目已配置 GitHub Actions 脚本。
 
+#### 1. 创建 Cloudflare API Token
+
+为了让 GitHub Actions 有权部署到您的账户，您需要创建一个具有特定权限的 Token：
+
+1.  登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+2.  点击右上角的 **个人资料图标 (Profile)** -> **我的设置 (My Profile)**。
+3.  在左侧菜单点击 **API 令牌 (API Tokens)**。
+4.  点击 **创建令牌 (Create Token)**。
+5.  在“API 令牌模板”中，点击 **使用模板 (Use template)** 旁边的 **编辑 Cloudflare Workers (Edit Cloudflare Workers)**。
+6.  **配置权限**（通常模板已默认选好，请确保包含以下内容）：
+    *   **账户 (Account)** - **Workers 脚本 (Workers Scripts)** - **编辑 (Edit)**
+    *   **账户 (Account)** - **Workers KV 存储 (Workers KV Storage)** - **编辑 (Edit)**
+    *   **用户 (User)** - **成员资格 (Memberships)** - **读取 (Read)**
+    *   **用户 (User)** - **用户详细信息 (User Details)** - **读取 (Read)**
+7.  在 **账户资源 (Account Resources)** 中选择 **所有账户 (All accounts)** 或者您的特定账户。
+8.  点击 **继续以显示摘要 (Continue to summary)** -> **创建令牌 (Create Token)**。
+9.  **立即复制并保存该令牌**（它只会出现一次）。
+
+#### 2. 配置 GitHub Secrets
+
 1.  在 GitHub 仓库中，进入 **Settings** -> **Secrets and variables** -> **Actions**。
 2.  新建以下 **Repository secrets**:
-    *   `CLOUDFLARE_API_TOKEN`: 您的 Cloudflare API Token (需要有编辑 Workers 的权限)。
-    *   `CLOUDFLARE_ACCOUNT_ID`: 您的 Cloudflare 账户 ID (在 Dashboard 的 Workers 页面右侧可以看到)。
-    *   `CF_KV_ID` (可选): 如果您不想在代码里写 KV ID，可以在这里设置，CI 脚本会自动注入。
-3.  推送代码到 `master` 或 `main` 分支，部署将自动开始。
-    *   **注意**：默认需要 commit message 包含 `[deploy-prod]` 才会触发生产环境部署（取决于 `.github/workflows/deploy.yml` 的配置）。
+    *   `CLOUDFLARE_API_TOKEN`: 填入您刚刚生成的 Token。
+    *   `CLOUDFLARE_ACCOUNT_ID`: 您的 Cloudflare 账户 ID（在 Dashboard 的 Workers 页面右侧可以看到）。
+    *   `CF_KV_ID` (可选): 如果您不想在代码里写 KV ID，可以在这里设置。
+
+#### 3. 触发部署
+
+推送代码到 `master` 或 `main` 分支。
+*   **注意**：默认需要 commit message 包含 `[deploy-prod]` 才会触发生产环境部署。
 
 ### 方式 B：本地手动部署
 
