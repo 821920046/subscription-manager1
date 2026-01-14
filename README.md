@@ -18,6 +18,11 @@ Modular TypeScript Version
 
 ## 🆕 最近更新
 
+- **项目精简与代码瘦身 (2026-01-14)**：
+  - **核心代码重构**：删除了未使用的 `ExportService`、`MonitoringService`、`RateLimiter`（已整合至主逻辑）以及 `AppError` 异常基类，使代码库更加轻量化。
+  - **工具类清理**：移除了冗余的 `cache.ts`、`errors.ts` 和旧版皮肤模板，减少系统开销。
+  - **CI/CD 部署加固**：优化了 GitHub Actions 部署脚本，引入 `npm ci` 确保环境一致性，并增加了 KV 绑定的自动化校验。
+  - **文档体系升级**：新增了专用的 **`DEPLOYMENT.md`** 部署指南，涵盖从环境变量、KV 绑定到自动化流水线的完整方案。
 - **UI/UX 体验升级**：
   - **移动端适配优化**：全新设计的移动端卡片式视图，解决表格在手机端显示不全的问题；操作按钮优化，触控更友好
   - **桌面端布局调整**：优化表格列宽与截断逻辑，解决服务名称与操作按钮被遮挡的问题；调整按钮顺序（编辑 -> 启/停用 -> 测试通知 -> 删除）符合操作习惯
@@ -89,16 +94,19 @@ Spotify,音乐,2023-12-15,2024-12-15,1,year,99.00,7,个人独享,true,true,false
 
 ## 📂 目录结构
 
-```
+```text
 src/
-├── services/        # 业务逻辑 (订阅管理, 通知发送)
-├── templates/       # HTML 模板 (Admin, Config, Login, Debug)
-├── utils/           # 工具函数 (Auth, Date, Lunar, Http)
+├── config/          # 系统常量
+├── services/        # 核心业务逻辑 (订阅、通知推送)
+├── templates/       # HTML 界面模板 (Admin, Config, Login, Debug)
+├── utils/           # 工具函数 (Auth, Date, Lunar, Http, Logger)
 ├── types.ts         # TypeScript 类型定义
-└── worker.ts        # Workers 入口文件
+└── worker.ts        # Cloudflare Workers 入口 (路由分发、定时任务)
 ```
 
 ## 🚀 部署指南
+
+> **💡 快速部署**：详细的 Cloudflare Workers 部署流程请参考专用的 [**部署文档 (DEPLOYMENT.md)**](./DEPLOYMENT.md)。
 
 ### 1. 环境准备
 
