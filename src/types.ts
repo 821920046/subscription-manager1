@@ -13,6 +13,7 @@ export interface Subscription {
   isActive: boolean;
   autoRenew: boolean;
   useLunar?: boolean;
+  weNotifyUserIds?: string;
   createdAt?: string;
   updatedAt?: string;
   daysRemaining?: number; // Runtime calculated field

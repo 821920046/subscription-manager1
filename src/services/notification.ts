@@ -317,6 +317,33 @@ export function formatWeNotifyStructuredContent(subscriptions: Subscription[], c
 }
 
 /**
+ * 分发 WeNotify 通知内容
+ */
+export function distributeWeNotifyNotifications(subscriptions: Subscription[], config: Config): Map<string, Subscription[]> {
+  const distribution = new Map<string, Subscription[]>();
+  const globalUserIds = (config.wenotify?.userid || '').split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+
+  for (const sub of subscriptions) {
+    let targets: string[] = [];
+    if (sub.weNotifyUserIds) {
+      targets = sub.weNotifyUserIds.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+    }
+
+    if (targets.length === 0) {
+      targets = globalUserIds.length > 0 ? globalUserIds : [''];
+    }
+
+    for (const userId of targets) {
+      if (!distribution.has(userId)) {
+        distribution.set(userId, []);
+      }
+      distribution.get(userId)!.push(sub);
+    }
+  }
+  return distribution;
+}
+
+/**
  * 发送通知到所有启用的渠道
  */
 export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, env: Env | null = null, logPrefix = '[定时任务]', subscriptions: Subscription[] | null = null): Promise<void> {
@@ -334,13 +361,32 @@ export async function sendNotificationToAllChannels(title: string, commonContent
     console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
   }
   if (config.enabledNotifiers.includes('wenotify')) {
-    let wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+    let success = false;
+    // 如果有订阅数据，执行分发逻辑
     if (subscriptions && subscriptions.length > 0) {
-      wenotifyContent = formatWeNotifyStructuredContent(subscriptions, config);
+      const distribution = distributeWeNotifyNotifications(subscriptions, config);
+      for (const [userId, items] of distribution.entries()) {
+        const userContent = formatWeNotifyStructuredContent(items, config);
+        const target = userId === '' ? undefined : userId;
+        const s = await sendWeNotifyEdgeNotification(title, userContent, config, false, target);
+        if (s) success = true;
+      }
+    } else {
+      // 无订阅数据（如测试、报警），发送给全局用户
+      const globalUserIds = (config.wenotify?.userid || '').split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+      if (globalUserIds.length === 0) globalUserIds.push(''); // Default
+
+      let content = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+      // 对于报警或测试，可以保留一些格式或直接发送
+
+      for (const userId of globalUserIds) {
+        const target = userId === '' ? undefined : userId;
+        const s = await sendWeNotifyEdgeNotification(title, content, config, false, target);
+        if (s) success = true;
+      }
     }
-    const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
     results.push({ channel: 'wenotify', success });
-    console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
+    console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '部分/全部失败'}`);
   }
   if (config.enabledNotifiers.includes('wechatOfficialAccount')) {
     const content = commonContent.replace(/(\**|\*|##|#|`)/g, '');
@@ -490,7 +536,7 @@ export async function sendNotifyXNotification(title: string, content: string, de
 }
 
 // WeNotify Edge
-export async function sendWeNotifyEdgeNotification(title: string, content: string, config: Config, throwOnError = false): Promise<boolean> {
+export async function sendWeNotifyEdgeNotification(title: string, content: string, config: Config, throwOnError = false, targetUserId?: string): Promise<boolean> {
   try {
     if (!config.wenotify?.url || !config.wenotify?.token) {
       const msg = '[WeNotify Edge] 通知未配置，缺少服务地址或Token';
@@ -511,8 +557,11 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       content: content,
       token: tokenStr
     };
-    if (config.wenotify.userid) {
-      body.userid = config.wenotify.userid;
+
+    // 优先使用传入的目标用户，否则使用配置的用户
+    const finalUserId = targetUserId !== undefined ? targetUserId : config.wenotify.userid;
+    if (finalUserId) {
+      body.userid = finalUserId;
     }
     if (config.wenotify.templateId) {
       body.template_id = config.wenotify.templateId;

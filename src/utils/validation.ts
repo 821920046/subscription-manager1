@@ -53,6 +53,7 @@ export const SubscriptionSchema = z.object({
   isActive: z.boolean().default(true),
   autoRenew: z.boolean().default(true),
   useLunar: z.boolean().optional().default(false),
+  weNotifyUserIds: z.string().optional().default(''),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
 });
