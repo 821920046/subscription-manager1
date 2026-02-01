@@ -7,6 +7,20 @@ import { CONFIG } from '../config/constants';
 import { Logger } from './logger';
 
 /**
+ * JWT Payload 类型
+ */
+export interface JWTPayload {
+  username: string;
+  iat: number;
+  exp: number;
+}
+
+/**
+ * 默认 JWT 过期时间（秒）- 24小时
+ */
+const DEFAULT_JWT_EXPIRY = 86400;
+
+/**
  * 密码哈希
  */
 export async function hashPassword(password: string): Promise<string> {
@@ -42,31 +56,27 @@ export function validateJWTSecret(secret: string): boolean {
 }
 
 export const CryptoJS = {
-  HmacSHA256: function (message: string, key: string) {
+  HmacSHA256: async function (message: string, key: string): Promise<string> {
     const keyData = new TextEncoder().encode(key);
     const messageData = new TextEncoder().encode(message);
 
-    return Promise.resolve().then(() => {
-      return crypto.subtle.importKey(
-        "raw",
-        keyData,
-        { name: "HMAC", hash: { name: "SHA-256" } },
-        false,
-        ["sign"]
-      );
-    }).then(cryptoKey => {
-      return crypto.subtle.sign(
-        "HMAC",
-        cryptoKey,
-        messageData
-      );
-    }).then(buffer => {
-      const hashArray = Array.from(new Uint8Array(buffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    });
-  }
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: { name: 'SHA-256' } },
+      false,
+      ['sign']
+    );
+
+    const buffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const hashArray = Array.from(new Uint8Array(buffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  },
 };
 
+/**
+ * 生成随机密钥
+ */
 export function generateRandomSecret(): string {
   // Use Web Crypto API for secure random generation
   const array = new Uint8Array(64);
@@ -79,9 +89,26 @@ export function generateRandomSecret(): string {
   return result;
 }
 
-export async function generateJWT(username: string, secret: string): Promise<string> {
+/**
+ * 生成 JWT Token
+ *
+ * @param username - 用户名
+ * @param secret - JWT 密钥
+ * @param expiresIn - 过期时间（秒），默认 24 小时
+ * @returns JWT Token
+ */
+export async function generateJWT(
+  username: string,
+  secret: string,
+  expiresIn: number = DEFAULT_JWT_EXPIRY
+): Promise<string> {
   const header = { alg: 'HS256', typ: 'JWT' };
-  const payload = { username, iat: Math.floor(Date.now() / 1000) };
+  const now = Math.floor(Date.now() / 1000);
+  const payload: JWTPayload = {
+    username,
+    iat: now,
+    exp: now + expiresIn,
+  };
 
   const headerBase64 = btoa(JSON.stringify(header));
   const payloadBase64 = btoa(JSON.stringify(payload));
@@ -92,7 +119,17 @@ export async function generateJWT(username: string, secret: string): Promise<str
   return headerBase64 + '.' + payloadBase64 + '.' + signature;
 }
 
-export async function verifyJWT(token: string | null, secret: string): Promise<{ username: string; iat: number } | null> {
+/**
+ * 验证 JWT Token
+ *
+ * @param token - JWT Token
+ * @param secret - JWT 密钥
+ * @returns JWT Payload 或 null（验证失败）
+ */
+export async function verifyJWT(
+  token: string | null,
+  secret: string
+): Promise<JWTPayload | null> {
   try {
     if (!token || !secret) {
       console.log('[JWT] Token或Secret为空');
@@ -114,7 +151,15 @@ export async function verifyJWT(token: string | null, secret: string): Promise<{
       return null;
     }
 
-    const payload = JSON.parse(atob(payloadBase64));
+    const payload = JSON.parse(atob(payloadBase64)) as JWTPayload;
+
+    // 验证过期时间
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      console.log('[JWT] Token已过期，过期时间:', new Date(payload.exp * 1000).toISOString());
+      return null;
+    }
+
     console.log('[JWT] 验证成功，用户:', payload.username);
     return payload;
   } catch (error) {

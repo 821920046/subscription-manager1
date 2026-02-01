@@ -5,8 +5,13 @@ export function getCookieValue(cookieString: string | null, key: string): string
   return match ? match[2] : null;
 }
 
-export async function requestWithRetry(url: string, options: RequestInit, retries = 1, timeoutMs = 8000): Promise<Response> {
-  let lastError: any = null;
+export async function requestWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 1,
+  timeoutMs = 8000
+): Promise<Response> {
+  let lastError: Error | null = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -17,7 +22,7 @@ export async function requestWithRetry(url: string, options: RequestInit, retrie
       lastError = new Error('Request failed');
     } catch (e) {
       clearTimeout(timer);
-      lastError = e;
+      lastError = e instanceof Error ? e : new Error(String(e));
     }
   }
   throw lastError;

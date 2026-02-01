@@ -25,7 +25,7 @@ export interface Subscription {
 
 export interface ChannelConfig {
   enabled: boolean;
-  [key: string]: any;
+  [key: string]: string | number | boolean | undefined;
 }
 
 export interface TelegramConfig {
@@ -82,6 +82,7 @@ export interface Config {
   adminUsername?: string;
   adminPassword?: string;
   jwtSecret?: string;
+  thirdPartyToken?: string; // 第三方通知 API 专用 Token
   timezone?: string;
   reminderTimes?: string[];
   showLunarGlobal?: boolean;
@@ -118,6 +119,10 @@ export interface DebugInfo {
 
 export interface KVNamespace {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number; expiration?: number }): Promise<void>;
+  put(
+    key: string,
+    value: string,
+    options?: { expirationTtl?: number; expiration?: number }
+  ): Promise<void>;
   delete(key: string): Promise<void>;
 }

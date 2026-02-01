@@ -4,6 +4,97 @@ import { formatTimeInTimezone, formatTimezoneDisplay } from '../utils/date';
 import { lunarCalendar } from '../utils/lunar';
 import { requestWithRetry } from '../utils/http';
 
+// 外部 API 响应类型定义
+interface WeChatAccessTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  errcode?: number;
+  errmsg?: string;
+}
+
+interface WeChatTemplateMessageResponse {
+  errcode: number;
+  errmsg: string;
+  msgid?: string;
+}
+
+interface TelegramSendMessageResponse {
+  ok: boolean;
+  result?: unknown;
+  description?: string;
+  error_code?: number;
+}
+
+interface NotifyXApiResponse {
+  status: 'queued' | 'sent' | 'failed';
+  message?: string;
+  id?: string;
+}
+
+interface BarkApiResponse {
+  code: number;
+  message: string;
+  timestamp?: number;
+  id?: string;
+}
+
+interface ResendEmailResponse {
+  id: string;
+  from: string;
+  to: string | string[];
+  created_at: string;
+}
+
+interface WeChatBotResponse {
+  errcode: number;
+  errmsg: string;
+}
+
+interface FailureLogEntry {
+  timestamp: string;
+  title: string;
+  failures: Array<{ channel: string; success: boolean }>;
+  successes: Array<{ channel: string; success: boolean }>;
+}
+
+interface FailureLogIndex {
+  key: string;
+  id: number;
+}
+
+interface WeNotifyEdgeRequestBody {
+  title: string;
+  content: string;
+  token: string;
+  userid?: string;
+  template_id?: string;
+}
+
+interface BarkPushRequestBody {
+  title: string;
+  body: string;
+  device_key: string;
+  isArchive?: number;
+  sound?: string;
+  icon?: string;
+  group?: string;
+  url?: string;
+  copy?: string;
+  autoCopy?: number;
+}
+
+type WeChatBotMessage =
+  | { msgtype: 'text'; text: { content: string; mentioned_list?: string[]; mentioned_mobile_list?: string[] } }
+  | { msgtype: 'markdown'; markdown: { content: string } };
+
+interface WeChatTemplateData {
+  thing01?: { value: string };
+  thing02?: { value: string };
+  time01?: { value: string };
+  number01?: { value: string };
+  [key: string]: { value: string } | undefined;
+}
+
 /**
  * 获取微信公众号 Access Token
  */
@@ -15,7 +106,7 @@ async function getWeChatAccessToken(env: Env, config: WeChatOfficialAccountConfi
   const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
   try {
     const resp = await requestWithRetry(url, { method: 'GET' }, 2, 5000);
-    const data: any = await resp.json();
+    const data = await resp.json();
     if (data.access_token) {
       // 缓存 Token，有效期 7200 秒，这里设置 7000 秒
       await env.SUBSCRIPTIONS_KV.put(key, data.access_token, { expirationTtl: 7000 });
@@ -298,7 +389,7 @@ export async function sendNotificationToAllChannels(title: string, commonContent
 
   const failures = results.filter(r => !r.success);
   if (failures.length > 0 && env?.SUBSCRIPTIONS_KV) {
-    const payload: any = {
+    const payload: FailureLogEntry = {
       timestamp: new Date().toISOString(),
       title,
       failures,
@@ -309,7 +400,7 @@ export async function sendNotificationToAllChannels(title: string, commonContent
       const key = `reminder_failure_${id}`;
       await env.SUBSCRIPTIONS_KV.put(key, JSON.stringify(payload));
       const idxRaw = await env.SUBSCRIPTIONS_KV.get('reminder_failure_index');
-      let idx: any[] = [];
+      let idx: FailureLogIndex[] = [];
       if (idxRaw) {
         try { idx = JSON.parse(idxRaw) || []; } catch { }
       }
@@ -362,7 +453,7 @@ export async function sendTelegramNotification(message: string, config: Config):
       })
     }, 2, 8000);
 
-    const result = await response.json() as any;
+    const result = await response.json();
     return result.ok;
   } catch (error) {
     console.error('[Telegram] 发送通知失败:', error);
@@ -389,7 +480,7 @@ export async function sendNotifyXNotification(title: string, content: string, de
       })
     }, 2, 8000);
 
-    const result = await response.json() as any;
+    const result = await response.json();
     return result.status === 'queued';
   } catch (error) {
     console.error('[NotifyX] 发送通知失败:', error);
@@ -414,7 +505,7 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
     const addToken = (u: string) => u + (u.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(tokenStr);
     const primaryUrl = addToken(joined);
 
-    const body: any = {
+    const body: WeNotifyEdgeRequestBody = {
       title: title,
       content: content,
       token: tokenStr
@@ -441,7 +532,7 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       return false;
     }
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error('[WeNotify Edge] 发送通知失败:', error);
     if (throwOnError) throw error;
     return false;
@@ -458,7 +549,7 @@ export async function sendBarkNotification(title: string, content: string, confi
 
     const serverUrl = config.bark.server || 'https://api.day.app';
     const url = serverUrl + '/push';
-    const payload: any = {
+    const payload: BarkPushRequestBody = {
       title: title,
       body: content,
       device_key: config.bark.deviceKey
@@ -476,7 +567,7 @@ export async function sendBarkNotification(title: string, content: string, confi
       body: JSON.stringify(payload)
     }, 2, 8000);
 
-    const result = await response.json() as any;
+    const result = await response.json();
     return result.code === 200;
   } catch (error) {
     console.error('[Bark] 发送通知失败:', error);
@@ -549,8 +640,8 @@ export async function sendEmailNotification(title: string, content: string, conf
       })
     }, 1, 10000);
 
-    const result = await response.json() as any;
-    return response.ok && result.id;
+    const result = await response.json();
+    return response.ok && !!result.id;
   } catch (error) {
     console.error('[邮件通知] 发送邮件失败:', error);
     return false;
@@ -610,7 +701,7 @@ export async function sendWechatBotNotification(title: string, content: string, 
     }
 
     const msgType = config.wechatBot.msgType || 'text';
-    let messageData: any;
+    let messageData: WeChatBotMessage;
 
     if (msgType === 'markdown') {
       const markdownContent = `### ${title}\n\n${content}`;
@@ -631,13 +722,13 @@ export async function sendWechatBotNotification(title: string, content: string, 
     }
 
     if (config.wechatBot.atAll === 'true') {
-      if (msgType === 'text') {
+      if (msgType === 'text' && messageData.msgtype === 'text') {
         messageData.text.mentioned_list = ['@all'];
       }
     } else if (config.wechatBot.atMobiles) {
       const mobiles = config.wechatBot.atMobiles.split(',').map((m: string) => m.trim()).filter((m: string) => m);
       if (mobiles.length > 0) {
-        if (msgType === 'text') {
+        if (msgType === 'text' && messageData.msgtype === 'text') {
           messageData.text.mentioned_mobile_list = mobiles;
         }
       }
@@ -654,7 +745,7 @@ export async function sendWechatBotNotification(title: string, content: string, 
     const responseText = await response.text();
     if (response.ok) {
       try {
-        const result = JSON.parse(responseText);
+        const result = JSON.parse(responseText) as WeChatBotResponse;
         return result.errcode === 0;
       } catch (parseError) {
         return false;
@@ -692,7 +783,7 @@ export async function sendWeChatOfficialAccountNotification(title: string, conte
       // 这里采用一种比较通用的映射方式，兼容 Plan 中提到的 thing01, time01, number01, thing02
       // 注意：微信对字段长度有限制，尤其是 thing 类型
 
-      const payloadData: any = {
+      const payloadData: WeChatTemplateData = {
         thing01: { value: title.substring(0, 20) }, // 标题，截断到20字
         time01: { value: new Date().toISOString().split('T')[0] }, // 当前日期
         number01: { value: '1' }, // 这里的语义不太明确，暂时填1或者由外部传入
@@ -711,7 +802,7 @@ export async function sendWeChatOfficialAccountNotification(title: string, conte
       }, 2, 5000);
 
       if (resp.ok) {
-        const resJson: any = await resp.json();
+        const resJson = await resp.json();
         if (resJson.errcode === 0) {
           successCount++;
         } else {

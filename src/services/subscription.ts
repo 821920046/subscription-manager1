@@ -2,6 +2,7 @@ import { Subscription, Env } from '../types';
 import { lunarBiz, lunarCalendar } from '../utils/lunar';
 import { getConfig } from '../utils/config';
 import { getCurrentTimeInTimezone } from '../utils/date';
+import { CONFIG } from '../config/constants';
 
 /**
  * Calculate the next expiry date based on period
@@ -52,33 +53,56 @@ function calculateNextExpiryDate(
 export class SubscriptionService {
   constructor(private env: Env) { }
 
+  /**
+   * 获取所有订阅（使用分批并行获取优化性能）
+   */
   async getAllSubscriptions(): Promise<Subscription[]> {
     if (!this.env.SUBSCRIPTIONS_KV) return [];
+
     const indexStr = await this.env.SUBSCRIPTIONS_KV.get('subscriptions:index');
     if (indexStr) {
       const ids: string[] = JSON.parse(indexStr);
-      const promises = ids.map(id => this.env.SUBSCRIPTIONS_KV.get('subscription:' + id));
-      const results = await Promise.all(promises);
-      return results
-        .filter(s => s !== null)
-        .map(s => JSON.parse(s));
+      const subscriptions: Subscription[] = [];
+      const BATCH_SIZE = CONFIG.BATCH.SUBSCRIPTION_BATCH_SIZE;
+
+      // 分批并行获取，避免过多并发请求
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batch = ids.slice(i, i + BATCH_SIZE);
+        const promises = batch.map((id) => this.env.SUBSCRIPTIONS_KV.get('subscription:' + id));
+        const results = await Promise.all(promises);
+
+        for (const result of results) {
+          if (result !== null) {
+            try {
+              subscriptions.push(JSON.parse(result));
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+
+      return subscriptions;
     }
+
+    // 兼容旧数据格式迁移
     const legacy = await this.env.SUBSCRIPTIONS_KV.get('subscriptions');
     if (legacy) {
       const list: Subscription[] = JSON.parse(legacy);
-      const ids = list.map(s => s.id);
+      const ids = list.map((s) => s.id);
       await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(ids));
       for (const s of list) {
         await this.env.SUBSCRIPTIONS_KV.put('subscription:' + s.id, JSON.stringify(s));
       }
       return list;
     }
+
     return [];
   }
 
   async getSubscription(id: string): Promise<Subscription | undefined> {
     const s = await this.env.SUBSCRIPTIONS_KV.get('subscription:' + id);
-    if (s) return JSON.parse(s);
+    if (s) return JSON.parse(s) as Subscription;
     const subscriptions = await this.getAllSubscriptions();
     return subscriptions.find(s => s.id === id);
   }
@@ -143,9 +167,10 @@ export class SubscriptionService {
       await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(ids));
       await this.env.SUBSCRIPTIONS_KV.put('subscription:' + newSubscription.id, JSON.stringify(newSubscription));
       return { success: true, subscription: newSubscription };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("创建订阅异常：", error);
-      return { success: false, message: error.message || '创建订阅失败' };
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: errorMessage };
     }
   }
 
@@ -206,8 +231,9 @@ export class SubscriptionService {
 
       await this.env.SUBSCRIPTIONS_KV.put('subscription:' + id, JSON.stringify(updated));
       return { success: true, subscription: updated };
-    } catch (error: any) {
-      return { success: false, message: '更新订阅失败' };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '更新订阅失败';
+      return { success: false, message: errorMessage };
     }
   }
 
@@ -222,7 +248,7 @@ export class SubscriptionService {
       await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(newIds));
       await this.env.SUBSCRIPTIONS_KV.delete('subscription:' + id);
       return { success: true };
-    } catch (error) {
+    } catch (error: unknown) {
       return { success: false, message: '删除订阅失败' };
     }
   }
@@ -238,7 +264,7 @@ export class SubscriptionService {
       };
       await this.env.SUBSCRIPTIONS_KV.put('subscription:' + id, JSON.stringify(updated));
       return { success: true, subscription: updated };
-    } catch (error) {
+    } catch (error: unknown) {
       return { success: false, message: '更新状态失败' };
     }
   }
@@ -254,7 +280,6 @@ export class SubscriptionService {
     today.setHours(0, 0, 0, 0);
 
     const notifications: { subscription: Subscription; daysUntil: number }[] = [];
-    let hasUpdates = false;
 
     for (let i = 0; i < subscriptions.length; i++) {
       const sub = subscriptions[i];
@@ -287,7 +312,6 @@ export class SubscriptionService {
 
         sub.updatedAt = new Date().toISOString();
         await this.env.SUBSCRIPTIONS_KV.put('subscription:' + sub.id, JSON.stringify(sub));
-        hasUpdates = true;
 
         // Recalculate days remaining for the renewed subscription
         const newExpiry = new Date(sub.expiryDate);
@@ -313,9 +337,6 @@ export class SubscriptionService {
           notifications.push({ subscription: sub, daysUntil: daysRemaining });
         }
       }
-    }
-
-    if (hasUpdates) {
     }
 
     return { notifications };
