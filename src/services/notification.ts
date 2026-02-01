@@ -1,4 +1,5 @@
 
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 import { Env, Subscription, Config, WeChatOfficialAccountConfig } from '../types';
 import { formatTimeInTimezone, formatTimezoneDisplay } from '../utils/date';
 import { lunarCalendar } from '../utils/lunar';
@@ -106,7 +107,7 @@ async function getWeChatAccessToken(env: Env, config: WeChatOfficialAccountConfi
   const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
   try {
     const resp = await requestWithRetry(url, { method: 'GET' }, 2, 5000);
-    const data = await resp.json();
+    const data = (await resp.json()) as WeChatAccessTokenResponse;
     if (data.access_token) {
       // 缓存 Token，有效期 7200 秒，这里设置 7000 秒
       await env.SUBSCRIPTIONS_KV.put(key, data.access_token, { expirationTtl: 7000 });
@@ -453,7 +454,7 @@ export async function sendTelegramNotification(message: string, config: Config):
       })
     }, 2, 8000);
 
-    const result = await response.json();
+    const result = (await response.json()) as TelegramSendMessageResponse;
     return result.ok;
   } catch (error) {
     console.error('[Telegram] 发送通知失败:', error);
@@ -480,7 +481,7 @@ export async function sendNotifyXNotification(title: string, content: string, de
       })
     }, 2, 8000);
 
-    const result = await response.json();
+    const result = (await response.json()) as NotifyXApiResponse;
     return result.status === 'queued';
   } catch (error) {
     console.error('[NotifyX] 发送通知失败:', error);
@@ -567,7 +568,7 @@ export async function sendBarkNotification(title: string, content: string, confi
       body: JSON.stringify(payload)
     }, 2, 8000);
 
-    const result = await response.json();
+    const result = (await response.json()) as BarkApiResponse;
     return result.code === 200;
   } catch (error) {
     console.error('[Bark] 发送通知失败:', error);
@@ -640,7 +641,7 @@ export async function sendEmailNotification(title: string, content: string, conf
       })
     }, 1, 10000);
 
-    const result = await response.json();
+    const result = (await response.json()) as ResendEmailResponse;
     return response.ok && !!result.id;
   } catch (error) {
     console.error('[邮件通知] 发送邮件失败:', error);
@@ -802,7 +803,7 @@ export async function sendWeChatOfficialAccountNotification(title: string, conte
       }, 2, 5000);
 
       if (resp.ok) {
-        const resJson = await resp.json();
+        const resJson = (await resp.json()) as WeChatTemplateMessageResponse;
         if (resJson.errcode === 0) {
           successCount++;
         } else {
